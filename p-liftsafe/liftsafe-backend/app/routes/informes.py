@@ -1,15 +1,30 @@
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models.models import Informe, Inspeccion
 from app.schemas.schemas import MessageResponse
-from app.utils.auth_deps import get_current_user
 from app.controllers.informe_controller import generar_pdf_informe
 from datetime import datetime
+from jose import jwt, JWTError
+from app.config import settings
 
 router = APIRouter(prefix="/informes", tags=["Informes"])
+
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return {
+            "rol": payload.get("rol"),
+            "sub": payload.get("sub"),
+            "user_id": payload.get("user_id")
+        }
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Token invalido: {str(e)}")
 
 # 1. Generar informe PDF
 @router.post("/{id_inspeccion}/generar", response_model=MessageResponse)
