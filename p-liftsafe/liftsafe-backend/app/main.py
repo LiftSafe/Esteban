@@ -1,14 +1,14 @@
+
 ## // instalar las librerias 
 ## pip install -r requirements.txt
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, vistas, usuarios, ascensores, inspecciones, dashboard
+from app.routes import auth, vistas, usuarios, ascensores, inspecciones, dashboard, informes
 
 app = FastAPI(
     title="LiftSafe API",
     version="1.0",
-    # ✅ Agregar esquema de seguridad HTTP Bearer para Swagger
     swagger_ui_init_oauth={
         "usePkceWithAuthorizationCodeGrant": True,
     }
@@ -16,7 +16,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,7 +28,7 @@ app.include_router(usuarios.router)
 app.include_router(ascensores.router)
 app.include_router(inspecciones.router)
 app.include_router(dashboard.router)
-
+app.include_router(informes.router)
 
 @app.get("/")
 def root():
