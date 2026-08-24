@@ -134,3 +134,26 @@ class InspeccionCreate(BaseModel):
     fecha_programada: date  # ← Cambiar de datetime a date
     tipo_servicio: str = "Periódica"
     observaciones: Optional[str] = None
+
+# ============ FOTOGRAFIAS ============
+class FotografiaBase(BaseModel):
+    id_informe: int
+    id_item: int | None = None
+    descripcion: str | None = None
+    tipo_evidencia: str | None = None
+
+class FotografiaCreate(FotografiaBase):
+    pass
+
+class FotografiaResponse(FotografiaBase):
+    id_foto: int
+    nombre_archivo: str
+    ruta_archivo: str
+    tamano_kb: int | None = None
+    fecha_captura: datetime
+    latitud: float | None = None
+    longitud: float | None = None
+    sincronizado: bool
+
+    class Config:
+        from_attributes = True
