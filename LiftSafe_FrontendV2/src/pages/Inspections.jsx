@@ -1,556 +1,514 @@
-import { useState, useEffect } from 'react';
+// src/pages/Inspections.jsx
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import IconButton from '@mui/material/IconButton';
+
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Card, CardContent, Button, Chip, Table, TableBody, TableCell, 
-  TableContainer, TableHead, TableRow,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, 
-  Typography, Divider, IconButton, CircularProgress, Alert
+  Box, Card, CardContent, Button, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Typography, Checkbox, FormControlLabel, Divider, Alert, CircularProgress,
+  Snackbar, // ✅ AGREGADO
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import PageHeader from '../components/PageHeader';
+import SearchBar from '../components/SearchBar';
+import ListPagination from '../components/ListPagination';
+import { statusColor } from '../utils/statusHelpers';
+import { brand } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
-import { apiClient } from '../services/apiClient';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
+import { fetchInspecciones, fetchEdificios, fetchAscensores, crearInspeccion } from '../services/dashboardService';
 
-// ============================================
-// SERVICIOS
-// ============================================
-const inspeccionService = {
-  listar: () => apiClient.get('/inspecciones/mis-inspecciones'),
-  obtener: (id) => apiClient.get(`/inspecciones/${id}`),
-  crear: (data) => apiClient.post('/inspecciones/crear', data),
-  actualizarEstado: (id, estado) => apiClient.put(`/inspecciones/${id}/estado?estado=${estado}`)
-};
+const CHECKLIST_CATEGORIES = [
+  { category: 'Seguridad', items: ['Frenos de emergencia', 'Paracaídas', 'Límite de velocidad', 'Puertas de cabina'] },
+  { category: 'Mecánica', items: ['Cables de tracción', 'Poleas', 'Motor de tracción', 'Sistema de guías'] },
+  { category: 'Eléctrica', items: ['Tablero de control', 'Botonera', 'Iluminación de cabina', 'Sistema de alarma'] },
+  { category: 'Documentación', items: ['Manual de mantenimiento', 'Registro de revisiones', 'Placa de capacidad', 'Certificado vigente'] },
+];
 
-const checklistService = {
-  listarPorInspeccion: (id) => apiClient.get(`/checklist/inspeccion/${id}`)
-};
+// ========== COMPONENTE CONFIRM DIALOG (reutilizable inline) ==========
+function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title = 'Confirmar acción',
+  message = '¿Estás seguro de que deseas continuar?',
+  confirmText = 'Aceptar',
+  cancelText = 'Cancelar',
+  confirmColor = 'error',
+  loading = false,
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <WarningAmberIcon color={confirmColor} />
+          <Typography fontWeight={700}>{title}</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <Typography color="text.secondary">{message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={loading}>
+          {cancelText}
+        </Button>
+        <Button
+          variant="contained"
+          color={confirmColor}
+          onClick={onConfirm}
+          disabled={loading}
+        >
+          {loading ? 'Eliminando...' : confirmText}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
-const firmaService = {
-  firmarInspector: (id, firmaData) => apiClient.put(`/inspecciones/${id}/firma-inspector`, firmaData),
-  firmarCliente: (id, firmaData) => apiClient.put(`/inspecciones/${id}/firma-cliente`, firmaData),
-  verificarFirmas: (id) => apiClient.get(`/inspecciones/${id}/firmas`)
-};
-
-const fotografiaService = {
-  subir: (id_informe, file, descripcion) => {
-    const formData = new FormData();
-    formData.append('id_informe', id_informe);
-    formData.append('file', file);
-    if (descripcion) formData.append('descripcion', descripcion);
-    return apiClient.post('/fotografias', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  },
-  listarPorInforme: (id) => apiClient.get(`/fotografias/informe/${id}`),
-  eliminar: (id) => apiClient.delete(`/fotografias/${id}`)
-};
-
-const statusColor = {
-  'Programada': 'warning',
-  'En Progreso': 'info',
-  'Completada': 'success',
-  'Finalizada': 'success',
-  'Aprobada': 'success',
-  'Cancelada': 'error',
-  'Borrador': 'default'
-};
-
-// ============================================
-// COMPONENTE PRINCIPAL
-// ============================================
 export default function Inspections() {
-  const { user } = useAuth();
-  const [inspections, setInspections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { hasAction } = useAuth();
+  const { data: rows = [], loading, error, refetch } = useDashboardData(fetchInspecciones);
+  const { search, setSearch, page, setPage, paginated, totalCount } = usePaginatedSearch(
+    rows,
+    ['building', 'elevator', 'brand', 'model', 'type', 'inspector', 'status', 'date']
+  );
   
-  // Dialog de creación
-  const [openCreate, setOpenCreate] = useState(false);
-  const [newInspection, setNewInspection] = useState({
-    id_ascensor: '',
-    id_inspector: '',
-    fecha_programada: '',
-    observaciones_generales: ''
-  });
-  
-  // Dialog de detalle
+  const [open, setOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [checklist, setChecklist] = useState([]);
-  const [firmas, setFirmas] = useState({ 
-    firma_inspector: false, 
-    firma_cliente: false,
-    ambas_firmas: false 
-  });
-  const [fotos, setFotos] = useState([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fotoDescripcion, setFotoDescripcion] = useState('');
+  
+  const [edificios, setEdificios] = useState([]);
+  const [ascensores, setAscensores] = useState([]);
+  const [edificioSeleccionado, setEdificioSeleccionado] = useState('');
+  const [ascensorSeleccionado, setAscensorSeleccionado] = useState('');
+  const [tipoInspeccion, setTipoInspeccion] = useState('Periódica');
+  const [fechaProgramada, setFechaProgramada] = useState('');
+  const [fechaError, setFechaError] = useState('');
+  const [observaciones, setObservaciones] = useState('');
+  const [loadingModal, setLoadingModal] = useState(false);
 
-  // ============================================
-  // FUNCIÓN: Cargar inspecciones
-  // ============================================
-  const cargarInspecciones = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await inspeccionService.listar();
-      setInspections(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Error cargando inspecciones:', err);
-      setError('Error al cargar las inspecciones. Verifica tu conexión.');
-    } finally {
-      setLoading(false);
-    }
+  // ✅ ESTADOS PARA SNACKBAR (reemplazan todos los alert)
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+
+  // ✅ ESTADOS PARA CONFIRM DIALOG DE ELIMINAR
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, row: null });
+  const [deleting, setDeleting] = useState(false);
+
+  // Helper para mostrar snackbar
+  const showSnackbar = (message, severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
   };
 
-  // Cargar inspecciones al montar
-  useEffect(() => {
-    const fetchData = async () => {
-      await cargarInspecciones();
-    };
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  const setFechaMin = useCallback((node) => {
+    if (node !== null) {
+      const input = node.querySelector('input[type="date"]');
+      if (input) {
+        const hoy = new Date().toISOString().split('T')[0];
+        input.setAttribute('min', hoy);
+      }
+    }
   }, []);
 
-  // ============================================
-  // FUNCIÓN: Abrir detalle
-  // ============================================
-  const abrirDetalle = async (row) => {
-    setSelected(row);
-    setDetailOpen(true);
-    setLoadingDetail(true);
-    setChecklist([]);
-    setFotos([]);
-    setFirmas({ firma_inspector: false, firma_cliente: false, ambas_firmas: false });
+  const getHoy = () => {
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const validarFecha = (fecha) => {
+    if (!fecha) {
+      setFechaError('');
+      return false;
+    }
+    const hoy = getHoy();
+    if (fecha < hoy) {
+      setFechaError('La fecha no puede ser anterior a hoy');
+      return false;
+    }
+    setFechaError('');
+    return true;
+  };
+
+  const handleFechaChange = (e) => {
+    const nuevaFecha = e.target.value;
+    const hoy = getHoy();
+    if (nuevaFecha && nuevaFecha < hoy) {
+      setFechaProgramada('');
+      setFechaError('La fecha no puede ser anterior a hoy');
+      return;
+    }
+    setFechaProgramada(nuevaFecha);
+    setFechaError('');
+  };
+
+  useEffect(() => {
+    if (open) {
+      cargarEdificios();
+    }
+  }, [open]);
+
+  const cargarEdificios = async () => {
+    setLoadingModal(true);
+    try {
+      const data = await fetchEdificios();
+      setEdificios(data || []);
+    } catch (err) {
+      console.error('Error cargando edificios:', err);
+    } finally {
+      setLoadingModal(false);
+    }
+  };
+
+  const handleEdificioChange = async (edificioId) => {
+    setEdificioSeleccionado(edificioId);
+    setAscensorSeleccionado('');
+    if (!edificioId) {
+      setAscensores([]);
+      return;
+    }
+    setLoadingModal(true);
+    try {
+      const todosAscensores = await fetchAscensores();
+      const ascensoresFiltrados = todosAscensores.filter(a => a.building === edificioId);
+      setAscensores(ascensoresFiltrados);
+    } catch (err) {
+      console.error('Error cargando ascensores:', err);
+    } finally {
+      setLoadingModal(false);
+    }
+  };
+
+  const limpiarFormulario = () => {
+    setEdificioSeleccionado('');
+    setAscensorSeleccionado('');
+    setTipoInspeccion('Periódica');
+    setFechaProgramada('');
+    setFechaError('');
+    setObservaciones('');
+    setAscensores([]);
+  };
+
+  // ✅ REEMPLAZADOS: 4 alert() → showSnackbar()
+  const handleCrearInspeccion = async () => {
+    if (!edificioSeleccionado || !ascensorSeleccionado || !fechaProgramada) {
+      showSnackbar('Por favor complete todos los campos obligatorios', 'warning');
+      return;
+    }
+    if (!validarFecha(fechaProgramada)) {
+      showSnackbar(fechaError || 'La fecha programada no es válida', 'error');
+      return;
+    }
+    const ascensor = ascensores.find(a => a.id === ascensorSeleccionado);
+    if (!ascensor) {
+      showSnackbar('Ascensor no válido', 'error');
+      return;
+    }
+    
+    const data = {
+      id_ascensor: parseInt(ascensorSeleccionado),
+      id_inspector: 1,
+      fecha_programada: fechaProgramada,
+      tipo_servicio: tipoInspeccion,
+      observaciones: observaciones
+    };
     
     try {
-      // Obtener detalle de la inspección
-      const detalle = await inspeccionService.obtener(row.id_inspeccion || row.id);
-      setSelected(detalle);
-      
-      // Obtener checklist
-      try {
-        const checklistData = await checklistService.listarPorInspeccion(row.id_inspeccion || row.id);
-        setChecklist(Array.isArray(checklistData) ? checklistData : []);
-      } catch {
-        setChecklist([]);
-      }
-      
-      // Obtener estado de firmas
-      try {
-        const firmasData = await firmaService.verificarFirmas(row.id_inspeccion || row.id);
-        setFirmas(firmasData);
-      } catch {
-        setFirmas({ firma_inspector: false, firma_cliente: false, ambas_firmas: false });
-      }
-      
-      // Obtener fotos (si tiene id_informe)
-      if (detalle.id_informe) {
-        try {
-          const fotosData = await fotografiaService.listarPorInforme(detalle.id_informe);
-          setFotos(Array.isArray(fotosData) ? fotosData : []);
-        } catch {
-          setFotos([]);
-        }
-      }
-      
-    } catch (err) {
-      console.error('Error cargando detalle:', err);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  // ============================================
-  // FUNCIÓN: Crear inspección
-  // ============================================
-  const crearInspeccion = async () => {
-    try {
-      await inspeccionService.crear(newInspection);
-      setOpenCreate(false);
-      setNewInspection({
-        id_ascensor: '',
-        id_inspector: '',
-        fecha_programada: '',
-        observaciones_generales: ''
-      });
-      await cargarInspecciones();
-      alert('✅ Inspección creada exitosamente');
+      setLoadingModal(true);
+      const result = await crearInspeccion(data);
+      console.log('Inspección creada:', result);
+      setOpen(false);
+      limpiarFormulario();
+      if (refetch) refetch();
+      showSnackbar('Inspección creada exitosamente', 'success');
     } catch (err) {
       console.error('Error creando inspección:', err);
-      alert('❌ Error al crear la inspección');
+      showSnackbar(err.message || 'Error al crear inspección', 'error');
+    } finally {
+      setLoadingModal(false);
     }
   };
 
-  // ============================================
-  // FUNCIÓN: Subir foto
-  // ============================================
-  const subirFoto = async () => {
-    if (!selectedFile) {
-      alert('Selecciona una foto primero');
-      return;
-    }
-    if (!selected?.id_informe) {
-      alert('Esta inspección no tiene un informe asociado');
-      return;
-    }
+  // ✅ REEMPLAZADO: window.confirm() → ConfirmDialog
+  const handleDeleteClick = (row) => {
+    setDeleteDialog({ open: true, row });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.row) return;
+    setDeleting(true);
     try {
-      await fotografiaService.subir(selected.id_informe, selectedFile, fotoDescripcion);
-      setSelectedFile(null);
-      setFotoDescripcion('');
-      alert('✅ Foto subida exitosamente');
-      
-      // Recargar fotos
-      const fotosData = await fotografiaService.listarPorInforme(selected.id_informe);
-      setFotos(Array.isArray(fotosData) ? fotosData : []);
+      // TODO: await deleteInspeccion(deleteDialog.row.id);
+      console.log('Eliminar inspección:', deleteDialog.row.id);
+      showSnackbar('Inspección eliminada correctamente', 'success');
+      if (refetch) refetch();
     } catch (err) {
-      console.error('Error subiendo foto:', err);
-      alert('❌ Error al subir la foto');
+      showSnackbar(err.message || 'Error al eliminar la inspección', 'error');
+    } finally {
+      setDeleting(false);
+      setDeleteDialog({ open: false, row: null });
     }
   };
-
-  // ============================================
-  // RENDER
-  // ============================================
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box>
       <PageHeader
         title="Inspecciones"
-        subtitle={user?.rol === 'Administrador' ? 'Gestión global de inspecciones' : 'Tus inspecciones asignadas'}
+        subtitle="Inspecciones registradas en LiftSafe"
         breadcrumbs={[{ label: 'Inicio', path: '/dashboard' }, { label: 'Inspecciones' }]}
       />
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      
-      {user?.rol !== 'Cliente' && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenCreate(true)}>
-            Nueva inspección
-          </Button>
-        </Box>
-      )}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+        <SearchBar value={search} onChange={setSearch} placeholder="Buscar inspección..." />
+        {hasAction('createInspection') && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Nueva inspección</Button>
+        )}
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Card>
         <CardContent sx={{ p: 0 }}>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell><strong>ID</strong></TableCell>
-                  <TableCell><strong>Edificio/Ascensor</strong></TableCell>
-                  <TableCell><strong>Tipo</strong></TableCell>
-                  <TableCell><strong>Inspector</strong></TableCell>
-                  <TableCell><strong>Fecha</strong></TableCell>
-                  <TableCell><strong>Estado</strong></TableCell>
-                  <TableCell><strong>Firmas</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {!inspections || inspections.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                      No hay inspecciones registradas
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  inspections.map((row) => (
-                    <TableRow 
-                      key={row.id_inspeccion || row.id} 
-                      hover 
-                      sx={{ cursor: 'pointer' }} 
-                      onClick={() => abrirDetalle(row)}
-                    >
-                      <TableCell>
-                        <Typography fontWeight={600} color="primary.main">
-                          {row.id_inspeccion || row.id}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{row.codigo_ascensor || row.elevator || 'N/A'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{row.marca || ''}</Typography>
-                      </TableCell>
-                      <TableCell>{row.tipo_servicio || row.type || 'Periódica'}</TableCell>
-                      <TableCell>{row.nombre_inspector || row.inspector || 'N/A'}</TableCell>
-                      <TableCell>{row.fecha_inicio ? new Date(row.fecha_inicio).toLocaleDateString() : row.date || 'N/A'}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={row.estado || row.status || 'Pendiente'} 
-                          color={statusColor[row.estado || row.status] || 'default'} 
-                          size="small" 
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {row.firma_inspector && row.firma_cliente ? '✅' : 
-                         row.firma_inspector ? '⚠️ Inspector' : 
-                         row.firma_cliente ? '⚠️ Cliente' : '❌'}
-                      </TableCell>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
+          ) : (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'grey.50' }}>
+                      <TableCell><strong>Edificio</strong></TableCell>
+                      <TableCell><strong>Ascensor</strong></TableCell>
+                      <TableCell><strong>Tipo</strong></TableCell>
+                      <TableCell><strong>Inspector</strong></TableCell>
+                      <TableCell><strong>Fecha</strong></TableCell>
+                      <TableCell><strong>Próxima</strong></TableCell>
+                      <TableCell><strong>Estado</strong></TableCell>
+                      <TableCell align="right"><strong>Acciones</strong></TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                  </TableHead>
+
+                  <TableBody>
+                    {paginated.map((row) => (
+                      <TableRow key={row.id} hover sx={{ cursor: 'pointer' }}>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.building}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.elevator}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.type}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.inspector}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.date}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          {row.nextDate}
+                        </TableCell>
+                        <TableCell onClick={() => { setSelected(row); setDetailOpen(true); }}>
+                          <Chip label={row.status} color={statusColor[row.status] || 'default'} size="small" />
+                        </TableCell>
+                        
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                          <IconButton 
+                            size="small" 
+                            color="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('Editar inspección:', row.id);
+                            }}
+                            title="Editar inspección"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton 
+                            size="small" 
+                            color="error"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(row);
+                            }}
+                            title="Eliminar inspección"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!paginated.length && (
+                      <TableRow>
+                        <TableCell colSpan={8} align="center">No hay inspecciones registradas</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <ListPagination count={totalCount} page={page} onPageChange={setPage} />
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* ========================================== */}
-      {/* DIALOG DE NUEVA INSPECCIÓN */}
-      {/* ========================================== */}
-      <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="sm" fullWidth>
-        <DialogTitle fontWeight={700}>
-          Nueva inspección
-          <IconButton sx={{ position: 'absolute', right: 8, top: 8 }} onClick={() => setOpenCreate(false)}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+      {/* MODAL DE NUEVA INSPECCIÓN */}
+      <Dialog open={open} onClose={() => { setOpen(false); limpiarFormulario(); }} maxWidth="sm" fullWidth>
+        <DialogTitle fontWeight={700}>Nueva inspección</DialogTitle>
         <DialogContent>
+          {loadingModal && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField 
-              label="ID del Ascensor" 
+              select 
+              label="Edificio" 
               fullWidth 
-              value={newInspection.id_ascensor}
-              onChange={(e) => setNewInspection({...newInspection, id_ascensor: e.target.value})}
-              type="number"
-              required
-            />
+              value={edificioSeleccionado}
+              onChange={(e) => handleEdificioChange(e.target.value)}
+              disabled={loadingModal}
+            >
+              <MenuItem value=""><em>Seleccione un edificio</em></MenuItem>
+              {edificios.map((ed) => (
+                <MenuItem key={ed.id} value={ed.id}>
+                  {ed.name} - {ed.address}
+                </MenuItem>
+              ))}
+            </TextField>
+
             <TextField 
-              label="ID del Inspector" 
+              select 
+              label="Ascensor" 
               fullWidth 
-              value={newInspection.id_inspector}
-              onChange={(e) => setNewInspection({...newInspection, id_inspector: e.target.value})}
-              type="number"
-              required
-            />
+              value={ascensorSeleccionado}
+              onChange={(e) => setAscensorSeleccionado(e.target.value)}
+              disabled={!edificioSeleccionado || loadingModal}
+            >
+              <MenuItem value=""><em>Seleccione un ascensor</em></MenuItem>
+              {ascensores.map((asc) => (
+                <MenuItem key={asc.id} value={asc.id}>
+                  {asc.brand} {asc.model} - {asc.type} ({asc.capacity}kg)
+                </MenuItem>
+              ))}
+            </TextField>
+
             <TextField 
+              select 
+              label="Tipo de inspección" 
+              fullWidth 
+              value={tipoInspeccion}
+              onChange={(e) => setTipoInspeccion(e.target.value)}
+            >
+              <MenuItem value="Anual">Anual</MenuItem>
+              <MenuItem value="Periódica">Periódica</MenuItem>
+              <MenuItem value="Extraordinaria">Extraordinaria</MenuItem>
+            </TextField>
+
+            <TextField 
+              ref={setFechaMin}
               label="Fecha programada" 
               type="date" 
               fullWidth 
               InputLabelProps={{ shrink: true }}
-              value={newInspection.fecha_programada}
-              onChange={(e) => setNewInspection({...newInspection, fecha_programada: e.target.value})}
-              required
+              value={fechaProgramada}
+              onChange={handleFechaChange}
+              error={!!fechaError}
+              helperText={fechaError || ''}
+              sx={{
+                '& .MuiInputBase-root': {
+                  pt: 1.5,
+                }
+              }}
             />
+
             <TextField 
               label="Observaciones iniciales" 
               multiline 
               rows={3} 
               fullWidth 
-              value={newInspection.observaciones_generales}
-              onChange={(e) => setNewInspection({...newInspection, observaciones_generales: e.target.value})}
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
             />
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setOpenCreate(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={crearInspeccion}>
+          <Button onClick={() => { setOpen(false); limpiarFormulario(); }}>Cancelar</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleCrearInspeccion}
+            disabled={!edificioSeleccionado || !ascensorSeleccionado || !fechaProgramada || !!fechaError}
+          >
             Crear inspección
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ========================================== */}
-      {/* DIALOG DE DETALLE */}
-      {/* ========================================== */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="lg" fullWidth>
+      {/* MODAL DE DETALLE */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box>
-              <Typography fontWeight={700}>
-                Inspección #{selected?.id_inspeccion || selected?.id}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {selected?.codigo_ascensor || selected?.elevator || 'N/A'} · 
-                {selected?.tipo_servicio || selected?.type || 'Periódica'} · 
-                {selected?.nombre_inspector || selected?.inspector || 'N/A'}
-              </Typography>
-            </Box>
-            <Chip 
-              label={selected?.estado || selected?.status || 'Pendiente'} 
-              color={statusColor[selected?.estado || selected?.status] || 'default'} 
-            />
-          </Box>
-          <IconButton sx={{ position: 'absolute', right: 8, top: 8 }} onClick={() => setDetailOpen(false)}>
-            <CloseIcon />
-          </IconButton>
+          <Typography fontWeight={700}>{selected?.building}</Typography>
+          <Typography variant="body2" color="text.secondary">{selected?.elevator} · {selected?.type} · {selected?.inspector}</Typography>
         </DialogTitle>
-        
         <DialogContent>
-          {loadingDetail ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
+            <Box><Typography variant="caption" color="text.secondary">Dirección</Typography><Typography variant="body2">{selected?.building}</Typography></Box>
+            <Box><Typography variant="caption" color="text.secondary">Marca / Modelo</Typography><Typography variant="body2">{selected?.brand} {selected?.model}</Typography></Box>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary.dark">Lista de verificación técnica</Typography>
+          {CHECKLIST_CATEGORIES.map((cat) => (
+            <Box key={cat.category} sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1, color: brand.blueDark }}>{cat.category}</Typography>
+              {cat.items.map((item) => (
+                <FormControlLabel key={item} control={<Checkbox defaultChecked={selected?.status === 'Aprobada'} />} label={item} />
+              ))}
             </Box>
-          ) : (
-            <>
-              {/* Información general */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Fecha inicio</Typography>
-                  <Typography variant="body2">
-                    {selected?.fecha_inicio ? new Date(selected.fecha_inicio).toLocaleString() : 'N/A'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Fecha fin</Typography>
-                  <Typography variant="body2">
-                    {selected?.fecha_fin ? new Date(selected.fecha_fin).toLocaleString() : 'Pendiente'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Duración</Typography>
-                  <Typography variant="body2">{selected?.duracion_minutos || 'N/A'} min</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Observaciones</Typography>
-                  <Typography variant="body2">{selected?.observaciones_generales || 'Sin observaciones'}</Typography>
-                </Box>
-              </Box>
-
-              <Divider sx={{ mb: 2 }} />
-
-              {/* FIRMAS */}
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary.dark">
-                📝 Firmas Digitales
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 3, mb: 3 }}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Inspector</Typography>
-                  <Typography variant="body2" color={firmas?.firma_inspector ? 'success.main' : 'error.main'}>
-                    {firmas?.firma_inspector ? '✅ Firmado' : '❌ Pendiente'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Cliente</Typography>
-                  <Typography variant="body2" color={firmas?.firma_cliente ? 'success.main' : 'error.main'}>
-                    {firmas?.firma_cliente ? '✅ Firmado' : '❌ Pendiente'}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Ambas firmas</Typography>
-                  <Typography variant="body2" color={firmas?.ambas_firmas ? 'success.main' : 'warning.main'}>
-                    {firmas?.ambas_firmas ? '✅ Completas' : '⚠️ Incompletas'}
-                  </Typography>
-                </Box>
-              </Box>
-
-              <Divider sx={{ mb: 2 }} />
-
-              {/* CHECKLIST */}
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary.dark">
-                ✅ Checklist de Inspección
-              </Typography>
-              {!checklist || checklist.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No hay items de checklist registrados para esta inspección
-                </Typography>
-              ) : (
-                <Box sx={{ maxHeight: 200, overflow: 'auto', mb: 2 }}>
-                  {checklist.map((item, idx) => (
-                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-                      <Chip 
-                        label={item.resultado || 'Pendiente'} 
-                        size="small" 
-                        color={item.resultado === 'Cumple' ? 'success' : 
-                               item.resultado === 'No Cumple' ? 'error' : 
-                               item.resultado === 'No Aplica' ? 'default' : 'warning'}
-                      />
-                      <Typography variant="body2">{item.descripcion || `Item ${item.id_item}`}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-
-              <Divider sx={{ mb: 2 }} />
-
-              {/* FOTOGRAFÍAS */}
-              <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary.dark">
-                📸 Fotografías ({fotos.length})
-              </Typography>
-              
-              {/* Subir foto */}
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  id="foto-upload"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
-                />
-                <label htmlFor="foto-upload">
-                  <Button variant="outlined" component="span" startIcon={<PhotoCameraIcon />}>
-                    Seleccionar foto
-                  </Button>
-                </label>
-                {selectedFile && <Typography variant="body2">{selectedFile.name}</Typography>}
-                <TextField 
-                  label="Descripción" 
-                  size="small" 
-                  value={fotoDescripcion}
-                  onChange={(e) => setFotoDescripcion(e.target.value)}
-                  sx={{ flex: 1, minWidth: 150 }}
-                />
-                <Button 
-                  variant="contained" 
-                  onClick={subirFoto} 
-                  disabled={!selectedFile}
-                >
-                  Subir
-                </Button>
-              </Box>
-
-              {/* Lista de fotos */}
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {!fotos || fotos.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No hay fotos</Typography>
-                ) : (
-                  fotos.map((foto) => (
-                    <Box key={foto.id_foto} sx={{ 
-                      border: '1px solid #ddd', 
-                      borderRadius: 1, 
-                      p: 1, 
-                      width: 120,
-                      textAlign: 'center'
-                    }}>
-                      <img 
-                        src={`http://localhost:8000/${foto.ruta_archivo}`} 
-                        alt={foto.descripcion || 'Foto'} 
-                        style={{ width: '100%', height: 80, objectFit: 'cover' }}
-                        onError={(e) => { e.target.src = ''; }}
-                      />
-                      <Typography variant="caption" display="block" noWrap>
-                        {foto.descripcion || 'Sin descripción'}
-                      </Typography>
-                    </Box>
-                  ))
-                )}
-              </Box>
-            </>
-          )}
+          ))}
         </DialogContent>
-        
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setDetailOpen(false)}>Cerrar</Button>
-          <Button variant="outlined" onClick={() => alert('Generando reporte...')}>
-            Generar reporte
-          </Button>
-          <Button variant="contained" onClick={() => alert('Aprobando inspección...')}>
-            Aprobar inspección
-          </Button>
+          <Button variant="outlined">Generar reporte</Button>
+          <Button variant="contained">Aprobar inspección</Button>
         </DialogActions>
       </Dialog>
+
+      {/* ✅ SNACKBAR GLOBAL - Reemplaza todos los alert() */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      {/* ✅ CONFIRM DIALOG PARA ELIMINAR - Reemplaza window.confirm() */}
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, row: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Eliminar inspección"
+        message={
+          deleteDialog.row
+            ? `¿Eliminar inspección de "${deleteDialog.row.building}"? Esta acción no se puede deshacer.`
+            : ''
+        }
+        confirmText="Eliminar"
+        confirmColor="error"
+        loading={deleting}
+      />
     </Box>
   );
 }

@@ -1,60 +1,21 @@
-const API_URL = 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api';
 
-const getHeaders = () => {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
-  };
-};
-
-export const apiClient = {
-  get: async (endpoint) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      headers: getHeaders()
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error en la petición');
-    }
-    return response.json();
-  },
-  
-  post: async (endpoint, data) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error en la petición');
-    }
-    return response.json();
-  },
-  
-  put: async (endpoint, data) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error en la petición');
-    }
-    return response.json();
-  },
-  
-  delete: async (endpoint) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: getHeaders()
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error en la petición');
-    }
-    return response.json();
+async function parseResponse(response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = typeof data.detail === 'string'
+      ? data.detail
+      : data.message || 'Error en la solicitud';
+    throw new Error(message);
   }
-};
+  return data;
+}
+
+export async function apiGet(path) {
+  const token = sessionStorage.getItem('liftsafe_token');
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers });
+  return parseResponse(response);
+}
