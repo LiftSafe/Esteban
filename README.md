@@ -186,6 +186,18 @@ La aplicación estará disponible en: http://localhost:5173
 | Fotografías | ✅ | ✅ | ✅ | ✅ |
 | Programación | ✅ | ✅ | ✅ (reasignar/cancelar) | ✅ |
 | Usuario-Ascensor | ✅ | ✅ | ✅ (desasignar) | ✅ |
+| Solicitudes | ✅ | ✅ | ✅ | ✅ |
+| Checklist | ✅ | ✅ | ✅ | ✅ |
+| Observaciones | ✅ | ✅ | ✅ | ✅ |
+| Auditoría | - | ✅ | - | - |
+|--------|:-----:|:----:|:----------:|:--------:|
+| Usuarios | ✅ | ✅ | ✅ | ✅ |
+| Ascensores | ✅ | ✅ | ✅ | ✅ |
+| Inspecciones | ✅ | ✅ | ✅ | ✅ |
+| Informes | ✅ | ✅ | ✅ (envío) | ✅ |
+| Fotografías | ✅ | ✅ | ✅ | ✅ |
+| Programación | ✅ | ✅ | ✅ (reasignar/cancelar) | ✅ |
+| Usuario-Ascensor | ✅ | ✅ | ✅ (desasignar) | ✅ |
 | Solicitudes | ✅ | ✅ | ✅ | - |
 | Checklist | ✅ | ✅ | - | - |
 | Observaciones | ✅ | ✅ | ✅ | - |
@@ -210,6 +222,12 @@ La aplicación estará disponible en: http://localhost:5173
 | POST | `/informes/{id}/generar` | Generar PDF |
 | DELETE | `/informes/{id}` | Eliminar informe |
 | POST | `/fotografias/` | Subir foto |
+| PUT | `/fotografias/{id}` | Actualizar foto |
+| DELETE | `/fotografias/{id}` | Eliminar foto |
+| POST | `/checklist/` | Calificar ítem checklist |
+| PUT | `/checklist/{id}` | Actualizar calificación |
+| DELETE | `/checklist/{id}` | Eliminar calificación |
+| POST | `/programacion/` | Programar inspección |
 | PUT | `/fotografias/{id}` | Actualizar foto |
 | DELETE | `/fotografias/{id}` | Eliminar foto |
 | POST | `/programacion/` | Programar inspección |
