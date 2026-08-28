@@ -129,7 +129,38 @@ def obtener_cumplimiento(
         "items_cumplen": cumplen,
         "porcentaje_cumplimiento": round(porcentaje, 2),
     }
-# 5. Eliminar una calificación de checklist (por si el inspector se equivocó)
+
+
+# Actualizar calificación de checklist (PUT formal)
+@router.put("/{id_detalle}", response_model=DetalleChecklistResponse)
+def actualizar_detalle_checklist(
+    id_detalle: int,
+    data: DetalleChecklistCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    rol, correo, user_id = get_current_user_role(request)
+
+    if rol != "Inspector":
+        raise HTTPException(status_code=403, detail="Solo inspectores pueden actualizar checklist")
+
+    detalle = db.query(DetalleChecklist).filter(DetalleChecklist.id_detalle == id_detalle).first()
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Registro de checklist no encontrado")
+
+    inspeccion = db.query(Inspeccion).filter(Inspeccion.id_inspeccion == detalle.id_inspeccion).first()
+    if not inspeccion or inspeccion.id_inspector != user_id:
+        raise HTTPException(status_code=403, detail="No eres el inspector asignado a esta inspección")
+
+    detalle.resultado = data.resultado
+    detalle.observacion = data.observacion
+    detalle.accion_requerida = data.accion_requerida
+    db.commit()
+    db.refresh(detalle)
+    return detalle
+
+
+# Eliminar una calificación de checklist
 @router.delete("/{id_detalle}", response_model=MessageResponse)
 def eliminar_detalle_checklist(
     id_detalle: int,

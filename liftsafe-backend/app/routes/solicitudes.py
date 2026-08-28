@@ -126,15 +126,3 @@ def eliminar_solicitud(
     db.delete(solicitud)
     db.commit()
     return {"message": "Solicitud eliminada correctamente"}
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_solicitud(
-    id: int,
-    db: Session = Depends(get_db),
-    user_data: dict = Depends(require_admin)
-):
-    solicitud = db.query(Solicitud).filter(Solicitud.id_solicitud == id).first()
-    if not solicitud:
-        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    db.delete(solicitud)
-    db.commit()
-    return {"message": "Solicitud eliminada correctamente"}
