@@ -95,7 +95,15 @@ def crear_nueva_inspeccion(
             detail=f"La fecha programada ({fecha_programada}) no puede ser anterior a hoy ({hoy})"
         )
     
-    # Si es inspector, usar su propio ID
+    # Si es inspector, usar su propio ID; si es admin/coordinador, validar que el inspector esté activo
+    inspector_id = user_id if rol == 'Inspector' else data.id_inspector
+    
+    if rol != 'Inspector':
+        inspector = db.query(Usuario).filter(Usuario.id_usuario == inspector_id, Usuario.estado == 'activo').first()
+        if not inspector:
+            raise HTTPException(status_code=400, detail="El inspector seleccionado no está activo o no existe")
+    
+    try:
     inspector_id = user_id if rol == 'Inspector' else data.id_inspector
     
     try:

@@ -20,10 +20,11 @@ def asignar_inspector_ascensor(
 ):
     usuario = db.query(Usuario).filter(
         Usuario.id_usuario == data.id_usuario,
-        Usuario.id_rol == INSPECTOR_ROL_ID
+        Usuario.id_rol == INSPECTOR_ROL_ID,
+        Usuario.estado == 'activo'
     ).first()
     if not usuario:
-        raise HTTPException(status_code=404, detail="Inspector no encontrado")
+        raise HTTPException(status_code=404, detail="Inspector no encontrado o inactivo")
 
     ascensor = db.query(Ascensor).filter(Ascensor.id_ascensor == data.id_ascensor).first()
     if not ascensor:
