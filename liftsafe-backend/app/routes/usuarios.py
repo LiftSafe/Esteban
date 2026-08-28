@@ -98,7 +98,13 @@ def dashboard_inspector(inspector_id: int, db: Session = Depends(get_db)):
 def listado_usuarios(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
     
-    # ✅ Usar vista segura que NO incluye contrasena
+    # ✅ Usar vista segura que NO incluye contrasena y filtra solo activos
+    result = db.execute(text("""
+        SELECT u.*, r.nombre_rol 
+        FROM vista_usuarios_segura u
+        JOIN rol r ON u.id_rol = r.id_rol
+        WHERE u.estado = 'activo'
+    """)).mappings().all()
     result = db.execute(text("""
         SELECT u.*, r.nombre_rol 
         FROM vista_usuarios_segura u

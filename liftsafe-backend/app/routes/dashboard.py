@@ -54,8 +54,8 @@ def get_ascensores_query(db: Session, rol: str, user_id: int):
 
 
 def get_usuarios_query(db: Session, rol: str, user_id: int):
-    """Retorna la query base de usuarios filtrada por rol"""
-    query = db.query(Usuario)
+    """Retorna la query base de usuarios filtrada por rol y estado activo"""
+    query = db.query(Usuario).filter(Usuario.estado == 'activo')
     
     if rol == "Administrador":
         return query
@@ -378,27 +378,28 @@ def get_usuarios(
             SELECT u.*, r.nombre_rol 
             FROM vista_usuarios_segura u
             JOIN rol r ON u.id_rol = r.id_rol
+            WHERE u.estado = 'activo'
         """)).mappings().all()
     elif rol == "Director Técnico":
         result = db.execute(text("""
             SELECT u.*, r.nombre_rol 
             FROM vista_usuarios_segura u
             JOIN rol r ON u.id_rol = r.id_rol
-            WHERE r.nombre_rol != 'Administrador'
+            WHERE r.nombre_rol != 'Administrador' AND u.estado = 'activo'
         """)).mappings().all()
     elif rol == "Coordinador":
         result = db.execute(text("""
             SELECT u.*, r.nombre_rol 
             FROM vista_usuarios_segura u
             JOIN rol r ON u.id_rol = r.id_rol
-            WHERE r.nombre_rol IN ('Inspector', 'Cliente', 'Asesor')
+            WHERE r.nombre_rol IN ('Inspector', 'Cliente', 'Asesor') AND u.estado = 'activo'
         """)).mappings().all()
     else:
         result = db.execute(text("""
             SELECT u.*, r.nombre_rol 
             FROM vista_usuarios_segura u
             JOIN rol r ON u.id_rol = r.id_rol
-            WHERE u.id_usuario = :user_id
+            WHERE u.id_usuario = :user_id AND u.estado = 'activo'
         """), {"user_id": user_id}).mappings().all()
     
     resultado = []
