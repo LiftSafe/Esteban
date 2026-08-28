@@ -11,11 +11,46 @@ async function parseResponse(response) {
   return data;
 }
 
-export async function apiGet(path) {
-  const token = sessionStorage.getItem('liftsafe_token');
+function getToken() {
+  return sessionStorage.getItem('liftsafe_token') || sessionStorage.getItem('token');
+}
+
+function getHeaders(contentType = true) {
+  const token = getToken();
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (contentType) headers['Content-Type'] = 'application/json';
+  return headers;
+}
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers });
+export async function apiGet(path) {
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: getHeaders(false) });
+  return parseResponse(response);
+}
+
+export async function apiPost(path, body) {
+  const isFormData = body instanceof FormData;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: getHeaders(!isFormData),
+    body: isFormData ? body : JSON.stringify(body),
+  });
+  return parseResponse(response);
+}
+
+export async function apiPut(path, body) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  });
+  return parseResponse(response);
+}
+
+export async function apiDelete(path) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
   return parseResponse(response);
 }
