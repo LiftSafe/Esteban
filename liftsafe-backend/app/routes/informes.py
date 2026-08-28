@@ -112,14 +112,27 @@ def eliminar_informe(
     if current_user["rol"] not in ['Administrador', 'Director Técnico']:
         raise HTTPException(status_code=403, detail="No autorizado para eliminar informes")
     
+    from app.models.models import Fotografia, Observacion
+    
     informe = db.query(Informe).filter(Informe.id_informe == id).first()
     if not informe:
         raise HTTPException(status_code=404, detail="Informe no encontrado")
     
-    # Eliminar archivo PDF si existe
+    # 1. Eliminar fotografias asociadas (archivos fisicos + registros)
+    fotos = db.query(Fotografia).filter(Fotografia.id_informe == id).all()
+    for foto in fotos:
+        if foto.ruta_archivo and os.path.exists(foto.ruta_archivo):
+            os.remove(foto.ruta_archivo)
+        db.delete(foto)
+    
+    # 2. Eliminar observaciones asociadas
+    db.query(Observacion).filter(Observacion.id_informe == id).delete(synchronize_session=False)
+    
+    # 3. Eliminar archivo PDF si existe
     if informe.ruta_pdf and os.path.exists(informe.ruta_pdf):
         os.remove(informe.ruta_pdf)
     
+    # 4. Eliminar informe
     db.delete(informe)
     db.commit()
-    return {"message": "Informe eliminado exitosamente"}
+    return {"message": "Informe y todos sus datos asociados eliminados exitosamente"}

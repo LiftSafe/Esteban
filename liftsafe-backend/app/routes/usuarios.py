@@ -119,7 +119,7 @@ def listado_usuarios(request: Request, db: Session = Depends(get_db)):
         for row in result
     ]
 
-# ✅ Eliminar usuario
+# ✅ Eliminar usuario (Soft Delete para preservar relaciones e historial)
 @router.delete("/{user_id}", response_model=MessageResponse)
 def eliminar_usuario(
     user_id: int,
@@ -136,17 +136,41 @@ def eliminar_usuario(
     # No permitir eliminar al último administrador
     admin_rol = db.query(Rol).filter(Rol.nombre_rol == "Administrador").first()
     if admin_rol and user.id_rol == admin_rol.id_rol:
-        total_admins = db.query(Usuario).filter(Usuario.id_rol == admin_rol.id_rol).count()
+        total_admins = db.query(Usuario).filter(Usuario.id_rol == admin_rol.id_rol, Usuario.estado == 'activo').count()
         if total_admins <= 1:
             raise HTTPException(status_code=400, detail="No se puede eliminar el último administrador")
     
-    # Eliminar usuario
-    db.delete(user)
+    # Soft delete: cambiar estado a inactivo en lugar de eliminar fisicamente
+    # Esto preserva el historial de inspecciones, informes, auditoria, etc.
+    if user.estado == 'inactivo':
+        raise HTTPException(status_code=400, detail="El usuario ya está inactivo")
+    
+    user.estado = 'inactivo'
     db.commit()
     
-    return {"message": f"Usuario '{user.nombre_completo}' eliminado exitosamente"}
+    return {"message": f"Usuario '{user.nombre_completo}' desactivado exitosamente"}
 
 
+# ✅ Reactivar usuario (para recuperar cuentas desactivadas)
+@router.put("/{user_id}/reactivar", response_model=MessageResponse)
+def reactivar_usuario(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    require_admin(request)
+    
+    user = db.query(Usuario).filter(Usuario.id_usuario == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    if user.estado == 'activo':
+        raise HTTPException(status_code=400, detail="El usuario ya está activo")
+    
+    user.estado = 'activo'
+    db.commit()
+    
+    return {"message": f"Usuario '{user.nombre_completo}' reactivado exitosamente"}
 @router.put("/{user_id}", response_model=MessageResponse)
 def editar_usuario(
     user_id: int,

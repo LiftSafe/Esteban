@@ -123,6 +123,8 @@ def eliminar_programacion(
     if programacion.estado != "Programada":
         raise HTTPException(status_code=400, detail="Solo se pueden eliminar programaciones en estado Programada")
     
-    db.delete(programacion)
-    db.commit()
-    return {"message": "Programación eliminada exitosamente"}
+    # Verificar que no tenga inspecciones asociadas
+    if programacion.inspecciones:
+        raise HTTPException(status_code=400, detail="No se puede eliminar la programación porque tiene inspecciones asociadas")
+    
+    
