@@ -37,30 +37,6 @@ app.include_router(programacion.router)
 app.include_router(solicitudes.router)
 app.include_router(usuario_ascensor.router)
 
-app = FastAPI(
-    title="LiftSafe API",
-    version="1.0",
-    swagger_ui_init_oauth={
-        "usePkceWithAuthorizationCodeGrant": True,
-    }
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(auth.router)
-app.include_router(vistas.router)
-app.include_router(usuarios.router)
-app.include_router(ascensores.router)
-app.include_router(inspecciones.router)
-app.include_router(dashboard.router)
-app.include_router(informes.router)
-
 @app.get("/")
 def root():
     return {"message": "LiftSafe API funcionando"}

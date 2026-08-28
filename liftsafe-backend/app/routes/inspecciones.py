@@ -63,7 +63,7 @@ def mis_inspecciones(
     else:
         raise HTTPException(status_code=403, detail="Rol no autorizado")
 
-from app.schemas.schemas import InspeccionCreate
+from app.schemas.schemas import InspeccionCreate, MessageResponse
 from app.controllers.inspeccion_controller import crear_inspeccion
 
 @router.post("/crear")
@@ -107,3 +107,65 @@ def crear_nueva_inspeccion(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al crear inspección: {str(e)}")
+
+from app.schemas.schemas import InspeccionUpdate
+
+@router.put("/{id_inspeccion}", response_model=MessageResponse)
+def actualizar_inspeccion(
+    id_inspeccion: int,
+    data: InspeccionUpdate,
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: Session = Depends(get_db)
+):
+    rol, correo, user_id = get_current_user_role(credentials)
+    
+    if rol not in ['Administrador', 'Coordinador', 'Inspector']:
+        raise HTTPException(status_code=403, detail="No autorizado para actualizar inspecciones")
+    
+    inspeccion = db.query(Inspeccion).filter(Inspeccion.id_inspeccion == id_inspeccion).first()
+    if not inspeccion:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    
+    # Si es inspector, solo puede editar sus propias inspecciones
+    if rol == 'Inspector' and inspeccion.id_inspector != user_id:
+        raise HTTPException(status_code=403, detail="No autorizado para editar esta inspección")
+    
+    if data.estado is not None:
+        inspeccion.estado = data.estado
+    if data.observaciones_generales is not None:
+        inspeccion.observaciones_generales = data.observaciones_generales
+    if data.fecha_fin is not None:
+        inspeccion.fecha_fin = data.fecha_fin
+    if data.firma_inspector is not None:
+        inspeccion.firma_inspector = data.firma_inspector
+        inspeccion.fecha_firma_inspector = datetime.now()
+    if data.firma_cliente is not None:
+        inspeccion.firma_cliente = data.firma_cliente
+        inspeccion.fecha_firma_cliente = datetime.now()
+    
+    db.commit()
+    db.refresh(inspeccion)
+    return {"message": "Inspección actualizada exitosamente"}
+
+
+@router.delete("/{id_inspeccion}", response_model=MessageResponse)
+def eliminar_inspeccion(
+    id_inspeccion: int,
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: Session = Depends(get_db)
+):
+    rol, correo, user_id = get_current_user_role(credentials)
+    
+    if rol not in ['Administrador', 'Coordinador']:
+        raise HTTPException(status_code=403, detail="No autorizado para eliminar inspecciones")
+    
+    inspeccion = db.query(Inspeccion).filter(Inspeccion.id_inspeccion == id_inspeccion).first()
+    if not inspeccion:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    
+    if inspeccion.estado not in ['Pendiente', 'Programada']:
+        raise HTTPException(status_code=400, detail="Solo se pueden eliminar inspecciones en estado Pendiente o Programada")
+    
+    db.delete(inspeccion)
+    db.commit()
+    return {"message": "Inspección eliminada exitosamente"}

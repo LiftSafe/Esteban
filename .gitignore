@@ -1,35 +1,73 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-venv/
-.env
-
-# Node
-node_modules/
+.Python
+build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build / dist
+/dist
+/build
+*.local
+
+# Vite
 .vite/
 
-# IDEs
-.vscode/
+# IDE
 .idea/
-.cursor/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Otros
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
-fix_config.py
-fix_contrasena.py
 
-# Datos sensibles / uploads
+# Uploads (opcional, descomenta si no quieres subir fotos)
+# uploads/
+# liftsafe-backend/uploads/
+
+# Environment variables
 .env
-reset_codes.json
-uploads/
-comprobantes/
+.env.local
+.env.*.local
 
-# Archivos temporales
-estructura.txt
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-*.log
-fix_config.py
-fix_contrasena.py
+# Pytest
+.pytest_cache/

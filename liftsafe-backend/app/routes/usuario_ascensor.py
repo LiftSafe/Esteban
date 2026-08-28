@@ -91,3 +91,18 @@ def desasignar_inspector(
     asignacion.observaciones = data.observaciones or asignacion.observaciones
     db.commit()
     return {"message": "Inspector desasignado correctamente"}
+
+
+@router.delete("/{id}", response_model=MessageResponse)
+def eliminar_asignacion(
+    id: int,
+    db: Session = Depends(get_db),
+    rol: str = Depends(require_admin)
+):
+    asignacion = db.query(UsuarioAscensor).filter(UsuarioAscensor.id_usuario_ascensor == id).first()
+    if not asignacion:
+        raise HTTPException(status_code=404, detail="Asignación no encontrada")
+    
+    db.delete(asignacion)
+    db.commit()
+    return {"message": "Asignación eliminada exitosamente"}

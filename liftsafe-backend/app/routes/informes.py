@@ -7,6 +7,7 @@ from app.models.models import Informe, Inspeccion
 from app.schemas.schemas import MessageResponse
 from app.controllers.informe_controller import generar_pdf_informe
 from datetime import datetime
+import os
 from jose import jwt, JWTError
 from app.config import settings
 
@@ -100,3 +101,25 @@ def enviar_informe(
     informe.estado = "Enviado"
     db.commit()
     return {"message": "Informe enviado correctamente"}
+
+
+@router.delete("/{id}", response_model=MessageResponse)
+def eliminar_informe(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["rol"] not in ['Administrador', 'Director Técnico']:
+        raise HTTPException(status_code=403, detail="No autorizado para eliminar informes")
+    
+    informe = db.query(Informe).filter(Informe.id_informe == id).first()
+    if not informe:
+        raise HTTPException(status_code=404, detail="Informe no encontrado")
+    
+    # Eliminar archivo PDF si existe
+    if informe.ruta_pdf and os.path.exists(informe.ruta_pdf):
+        os.remove(informe.ruta_pdf)
+    
+    db.delete(informe)
+    db.commit()
+    return {"message": "Informe eliminado exitosamente"}

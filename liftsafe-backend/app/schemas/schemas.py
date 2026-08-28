@@ -267,6 +267,10 @@ class FotografiaResponse(FotografiaBase):
     class Config:
         from_attributes = True
 
+class FotografiaUpdate(BaseModel):
+    descripcion: Optional[str] = None
+    tipo_evidencia: Optional[str] = None
+
 class FirmaRequest(BaseModel):
     firma: str
 
@@ -322,3 +326,65 @@ class ObservacionResponse(ObservacionBase):
 
     class Config:
         from_attributes = True
+
+
+class AscensorCreate(BaseModel):
+    id_cliente: int
+    codigo_interno: str
+    marca: str
+    modelo: str
+    numero_serie: str
+    tipo_ascensor: str
+    capacidad_kg: int
+    capacidad_personas: Optional[int] = None
+    numero_pisos: int
+    velocidad_ms: Optional[float] = None
+    ubicacion_exacta: str
+    direccion_completa: str
+    ciudad: str
+    estado: str
+    fecha_instalacion: Optional[date] = None
+
+
+class AscensorUpdate(BaseModel):
+    id_cliente: Optional[int] = None
+    codigo_interno: Optional[str] = None
+    marca: Optional[str] = None
+    modelo: Optional[str] = None
+    numero_serie: Optional[str] = None
+    tipo_ascensor: Optional[str] = None
+    capacidad_kg: Optional[int] = None
+    capacidad_personas: Optional[int] = None
+    numero_pisos: Optional[int] = None
+    velocidad_ms: Optional[float] = None
+    ubicacion_exacta: Optional[str] = None
+    direccion_completa: Optional[str] = None
+    ciudad: Optional[str] = None
+    estado: Optional[str] = None
+    fecha_instalacion: Optional[date] = None
+
+
+class InspeccionUpdate(BaseModel):
+    estado: Optional[str] = None
+    observaciones_generales: Optional[str] = None
+    fecha_fin: Optional[datetime] = None
+    firma_inspector: Optional[str] = None
+    firma_cliente: Optional[str] = None
+
+
+class UsuarioUpdate(BaseModel):
+    nombre_completo: Optional[str] = None
+    correo: Optional[EmailStr] = None
+    telefono: Optional[str] = None
+    tipo_documento: Optional[DocumentType] = None
+    documento_identidad: Optional[str] = None
+    nit: Optional[str] = None
+    razon_social: Optional[str] = None
+    id_rol: Optional[int] = None
+
+    @field_validator("tipo_documento")
+    @classmethod
+    def check_doc_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in DOCUMENT_TYPES:
+            raise ValueError("Tipo de documento no válido")
+        return v

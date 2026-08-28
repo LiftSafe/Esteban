@@ -4,7 +4,7 @@ from typing import List
 from datetime import date
 from app.database import get_db
 from app.models.models import Programacion, Solicitud, Usuario
-from app.schemas.schemas import ProgramacionCreate, ProgramacionUpdate, ProgramacionResponse
+from app.schemas.schemas import ProgramacionCreate, ProgramacionUpdate, ProgramacionResponse, MessageResponse
 from app.utils.auth_deps import get_current_user, require_coordinador, INSPECTOR_ROL_ID
 
 router = APIRouter(prefix="/programacion", tags=["Programación"])
@@ -108,3 +108,21 @@ def cancelar_programacion(
     
     db.commit()
     return {"message": "Programación cancelada"}
+
+
+@router.delete("/{id}", response_model=MessageResponse)
+def eliminar_programacion(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_coordinador)
+):
+    programacion = db.query(Programacion).filter(Programacion.id_programacion == id).first()
+    if not programacion:
+        raise HTTPException(status_code=404, detail="Programación no encontrada")
+    
+    if programacion.estado != "Programada":
+        raise HTTPException(status_code=400, detail="Solo se pueden eliminar programaciones en estado Programada")
+    
+    db.delete(programacion)
+    db.commit()
+    return {"message": "Programación eliminada exitosamente"}

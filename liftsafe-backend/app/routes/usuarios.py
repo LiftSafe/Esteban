@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Usuario, Rol
-from app.schemas.schemas import UsuarioCreate, MessageResponse
+from app.schemas.schemas import UsuarioCreate, MessageResponse, UsuarioUpdate
 from app.controllers.usuario_controller import get_user_profile, get_admin_stats, get_cliente_ascensores, get_inspector_inspecciones
 from app.utils.auth_deps import require_admin
 from sqlalchemy import text
@@ -119,7 +119,7 @@ def listado_usuarios(request: Request, db: Session = Depends(get_db)):
         for row in result
     ]
 
-# ✅ NUEVO: Eliminar usuario
+# ✅ Eliminar usuario
 @router.delete("/{user_id}", response_model=MessageResponse)
 def eliminar_usuario(
     user_id: int,
@@ -145,3 +145,45 @@ def eliminar_usuario(
     db.commit()
     
     return {"message": f"Usuario '{user.nombre_completo}' eliminado exitosamente"}
+
+
+@router.put("/{user_id}", response_model=MessageResponse)
+def editar_usuario(
+    user_id: int,
+    request: Request,
+    user_data: UsuarioUpdate,
+    db: Session = Depends(get_db)
+):
+    require_admin(request)
+    
+    user = db.query(Usuario).filter(Usuario.id_usuario == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # Validar que el correo no esté duplicado
+    if user_data.correo is not None and user_data.correo != user.correo:
+        existing = db.query(Usuario).filter(Usuario.correo == user_data.correo).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="El correo ya está registrado")
+        user.correo = user_data.correo
+    
+    if user_data.nombre_completo is not None:
+        user.nombre_completo = user_data.nombre_completo
+    if user_data.telefono is not None:
+        user.telefono = user_data.telefono
+    if user_data.tipo_documento is not None:
+        user.tipo_documento = user_data.tipo_documento
+    if user_data.documento_identidad is not None:
+        user.documento_identidad = user_data.documento_identidad
+    if user_data.nit is not None:
+        user.nit = user_data.nit
+    if user_data.razon_social is not None:
+        user.razon_social = user_data.razon_social
+    if user_data.id_rol is not None:
+        rol = db.query(Rol).filter(Rol.id_rol == user_data.id_rol).first()
+        if not rol:
+            raise HTTPException(status_code=400, detail="Rol no válido")
+        user.id_rol = user_data.id_rol
+    
+    db.commit()
+    return {"message": f"Usuario '{user.nombre_completo}' actualizado exitosamente"}

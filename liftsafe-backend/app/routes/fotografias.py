@@ -6,7 +6,7 @@ import os
 import shutil
 from app.database import get_db
 from app.models.models import Fotografia, Informe
-from app.schemas.schemas import FotografiaResponse, MessageResponse
+from app.schemas.schemas import FotografiaResponse, MessageResponse, FotografiaUpdate
 from app.utils.auth_deps import get_current_user_role
 
 router = APIRouter(prefix="/fotografias", tags=["Fotografias"])
@@ -93,3 +93,28 @@ def eliminar_foto(
     db.delete(foto)
     db.commit()
     return {"message": "Foto eliminada"}
+
+
+@router.put("/{id_foto}", response_model=FotografiaResponse)
+def actualizar_foto(
+    id_foto: int,
+    request: Request,
+    data: FotografiaUpdate,
+    db: Session = Depends(get_db),
+):
+    rol, _, _ = get_current_user_role(request)
+    if rol != "Inspector":
+        raise HTTPException(status_code=403, detail="Solo inspectores pueden actualizar fotos")
+
+    foto = db.query(Fotografia).filter(Fotografia.id_foto == id_foto).first()
+    if not foto:
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+
+    if data.descripcion is not None:
+        foto.descripcion = data.descripcion
+    if data.tipo_evidencia is not None:
+        foto.tipo_evidencia = data.tipo_evidencia
+
+    db.commit()
+    db.refresh(foto)
+    return foto
